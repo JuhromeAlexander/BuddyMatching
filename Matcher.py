@@ -39,11 +39,26 @@ class Matcher:
             score = 0
 
             # Gender Prefs - Highest Priority
-            if self.match_gender or buddy.match_gender:
+            if self.match_gender and buddy.match_gender:
                 if self.gender == buddy.gender:
-                        score += self.match_pts[1]
+                    score += self.match_pts[1] * 1.0
                 else:
+                    score -= self.match_pts[1]
+            elif self.match_gender and not buddy.match_gender:
+                if self.gender == buddy.gender:
+                    score += self.match_pts[1] * 0.8
+                else:
+                    score -= self.match_pts[1]
+            elif not self.match_gender and buddy.match_gender:
+                if self.gender == buddy.gender:
+                    score += self.match_pts[1] * 0.6
+                else:
+                    score -= self.match_pts[1] * 0.5
+            else:
+                if self.gender == buddy.gender:
                     score += self.match_pts[2] / 2
+                else:
+                    score += 0
 
             # Faculty Prefs 
             if self.match_faculty or buddy.match_faculty:
