@@ -1,269 +1,289 @@
-import random
 import math
+import numpy as np
+import os
 import pandas as pd
-
+import random
+from scipy.optimize import linear_sum_assignment
 
 class Matcher:
 
-    def __init__(self, file_names, exchanger_data, exchanger_preference, buddy_data, buddy_preference, matching_preference, matching_points):
+    def __init__(self, file_names, exchanger_data, exchanger_prefs, buddy_data, 
+                 buddy_prefs, matching_prefs, matching_pts):
         self.file_names = file_names
         self.exchanger_data = exchanger_data
+        self.exchanger_prefs = exchanger_prefs
         self.buddy_data = buddy_data
-        self.exchanger_preference = exchanger_preference
-        self.buddy_preference = buddy_preference
-        self.matching_preference = matching_preference
-        self.matching_points = matching_points
-        if (len(self.matching_points) < 3):
-            raise Exception(
-                "Please fill up compulsory fields for Matching Points")
-        if (len(self.file_names) < 3):
-            raise Exception(
-                "Please fill up compulsory fields for File Names")
-        if (len(self.matching_preference) < 2):
-            raise Exception(
-                "Please fill up compulsory fields for Matching Preference")
-        if (len(self.exchanger_preference) < 5):
-            raise Exception(
-                "Please fill up compulsory fields for Exchanger Preference")
-        if (len(self.buddy_preference) < 5):
-            raise Exception(
-                "Please fill up compulsory fields for Buddy Preference")
+        self.buddy_prefs = buddy_prefs
+        self.matching_prefs = matching_prefs
+        self.matching_pts = matching_pts
+
+        # Validation checks
+        if len(self.matching_pts) < 3: raise Exception("Please fill up compulsory fields for Matching Points")
+        if len(self.file_names) < 3: raise Exception("Please fill up compulsory fields for File Names")
+        if len(self.matching_prefs) < 2: raise Exception("Please fill up compulsory fields for Matching Preference")
+        if len(self.exchanger_prefs) < 5: raise Exception("Please fill up compulsory fields for Exchanger Preference")
+        if len(self.buddy_prefs) < 5: raise Exception("Please fill up compulsory fields for Buddy Preference")
 
     class Exchanger:
-
-        def __init__(self, info, gender, match_gender, faculty, match_faculty, interest, match_points):
+        def __init__(self, info, gender, match_gender, faculty, match_faculty, 
+                     interests, match_pts):
             self.info = info
             self.gender = gender
             self.match_gender = match_gender
             self.faculty = faculty
             self.match_faculty = match_faculty
-            self.interest = interest
-            self.match_points = match_points
+            self.interests = interests
+            self.match_pts = match_pts
 
-        # Adjust the scores accordingly to optimise the significance of each preference
-        def matching_score(self, buddy):
+        def pure_match_score(self, buddy):
             score = 0
-            # This ensures that buddies that already have an exchanger are less likely to be matched again
-            # Ensuring fairness in distribution of exchangers to buddies
-            if buddy.has_exchanger():
-                score -= math.ceil(self.match_points[0] / 2)
 
-            # If either has a preference for gender, and it matches, add 1 to the score
-            # Else we add 0.5 to the score, as it is easier to match with someone who does not have a preference
+            # Gender Prefs - Highest Priority
             if self.match_gender or buddy.match_gender:
                 if self.gender == buddy.gender:
-                    score += self.match_points[1]
-            else:
-                score += self.match_points[2] / 2
-
-            # Same logic as above, but has a higher weightage of 5
-            if self.match_faculty or buddy.match_faculty:
-                matched = False
-                for faculty in buddy.faculty:
-                    if faculty in self.faculty:
-                        matched = True
-                        break
-                if matched:
-                    score += self.match_points[0]
+                        score += self.match_pts[1]
                 else:
-                    score -= self.match_points[0]
-            else:
-                score += self.match_points[0] / 5
+                    score += self.match_pts[2] / 2
 
-            # For eacb similar interests, add 1 to the score
-            for interest in self.interest:
-                if interest in buddy.interest:
-                    score += self.match_points[2]
+            # Faculty Prefs 
+            if self.match_faculty or buddy.match_faculty:
+                matched = any(fac in self.faculty for fac in buddy.faculty)
+                if matched:
+                    score += self.match_pts[0]
+                else:
+                    score -= self.match_pts[0]
+            else:
+                score += self.match_pts[0] / 5
+
+            # Interests Prefs
+            for interest in self.interests:
+                if interest in buddy.interests:
+                    score += self.match_pts[2]
 
             return score
 
-    # This code block is to encapsulate the information of a buddy
 
     class Buddy:
-
-        def __init__(self, info, gender, match_gender, faculty, match_faculty, interest, matching_preference):
+        def __init__(self, info, gender, match_gender, faculty, match_faculty, 
+                     interests, matching_prefs):
             self.info = info
             self.faculty = faculty
             self.match_faculty = match_faculty
             self.gender = gender
             self.match_gender = match_gender
-            self.interest = interest
+            self.interests = interests
             self.odds = random.randint(0, 9)
             self.exchangers = []
-            self.max_num_of_exchangers_per_buddy = matching_preference[0]
-            self.percentage_of_buddies_with_max_exchangers = math.ceil(
-                matching_preference[1] / 10)
 
-        # Check if the buddy has reached the limit of exchangers
-        def is_full(self):
-            if self.odds < 10 - self.percentage_of_buddies_with_max_exchangers:
-                if self.max_num_of_exchangers_per_buddy == 1:
-                    return len(self.exchangers) > 0
-                elif self.max_num_of_exchangers_per_buddy == 2:
-                    return len(self.exchangers) > 1
-                else:
-                    return len(self.exchangers) > self.max_num_of_exchangers_per_buddy - 2
-            else:
-                return len(self.exchangers) > self.max_num_of_exchangers_per_buddy - 1
-
-        def has_exchanger(self):
-            return len(self.exchangers) > 0
-
+            self.max_num_exchangers = matching_prefs[0]
+            self.percentage_buddies_with_max = math.ceil(matching_prefs[1] / 10)
+        
+        def get_capacity(self):
+            capacity = self.max_num_exchangers
+            if self.odds < 10 - self.percentage_buddies_with_max:
+                capacity = max(1, capacity - 1)
+            return capacity
+        
         def add_exchanger(self, exchanger):
-            if self.is_full():
-                return False
             self.exchangers.append(exchanger)
-            return True
 
-    def match(self):
-        matchings = []
+def match(self):
+        def load_data(filepath):
+            # Check the file extension
+            _, ext = os.path.splitext(filepath)
+            ext = ext.lower()
 
-        exchangers_data = None
-        buddies_data = None
+            if ext == '.csv':
+                try:
+                    return pd.read_csv(filepath, encoding='utf-8', encoding_errors='replace')
+                except UnicodeDecodeError:
+                    return pd.read_csv(filepath, encoding='cp1252', encoding_errors='replace')
+            elif ext in ['.xlsx', '.xls']:
+                # openpyxl handles the background decoding for Excel files
+                return pd.read_excel(filepath)
+            else:
+                raise Exception(f"Unsupported file type: {ext}. Please use .csv or .xlsx")
+            
+        exchangers_data = load_data(self.file_names[0])
+        buddies_data = load_data(self.file_names[1])
 
-        # Ensure that the name of the CSV files are correct
-        try:
-            exchangers_data = pd.read_csv(
-                self.file_names[0], encoding='utf-8', encoding_errors='replace')
-        except UnicodeDecodeError:
-            exchangers_data = pd.read_csv(
-                self.file_names[0], encoding='cp1252', encoding_errors='replace')
-        try:
-            buddies_data = pd.read_csv(
-                self.file_names[1], encoding='utf-8', encoding_errors='replace')
-        except UnicodeDecodeError:
-            buddies_data = pd.read_csv(
-                self.file_names[1], encoding='cp1252', encoding_errors='replace')
+        # Simple Automated Pre-Processing
+        exchanger_faculty, exchanger_match_faculty, exchanger_gender, exchanger_match_gender, exchanger_interests = self.exchanger_prefs
+        buddy_faculty, buddy_match_faculty, buddy_gender, buddy_match_gender, buddy_interests = self.buddy_prefs
+
+        exchagers_data = exchangers_data.drop_duplicates()
+        buddies_data = buddies_data.drop_duplicates()
+
+        exchangers_data = exchangers_data.sort_values(
+            by=[exchanger_match_faculty, exchanger_match_gender], ascending=[False, False]
+        )
+
+        buddies_data = buddies_data.sort_values(
+            by=[buddy_match_faculty, buddy_match_gender], ascending=[False, False]
+        )
+
         exchangers = []
         buddies = []
 
-        # Input the column names as per the CSV file
-        # For questions that allow multiple answers, split the answers by ';', ensure
-        # when creating the exchanger/buddy object, input as (answers[:-1]),
-        # where "answers" is the name of the variable of question that allows multiple answers
-        for _, data in exchangers_data.iterrows():
-            info = []
-            exchanger_faculty, exchanger_match_faculty, exchanger_gender, exchanger_match_gender, exchanger_interest = self.exchanger_preference
-            try:
-                faculty = data[exchanger_faculty].split(';')
-                match_faculty = data[exchanger_match_faculty] == 'Yes'
-                gender = data[exchanger_gender]
-                match_gender = data[exchanger_match_gender] == 'Yes'
-                interest = data[exchanger_interest].split(';')
-                for col in self.exchanger_data:
-                    info.append(data[col])
-            except:
-                raise Exception(
-                    "Please ensure that the column names for the exchanger data are correct")
+        # Parse Exchangers
+        for _, data in exchagers_data.iterrows():
+            info = [data[col] for col in self.exchanger_data]
+            faculty = str(data[exchanger_faculty]).split(';')[:-1]
+            match_faculty = data[exchanger_match_faculty] == 'Yes'
+            gender = data[exchanger_gender]
+            match_gender = data[exchanger_match_gender] == 'Yes'
+            interests = str(data[exchanger_interests]).split(';')[:-1]
 
-            exchanger = self.Exchanger(info, gender, match_gender,
-                                       faculty[:-1], match_faculty, interest[:-1], self.matching_points)
-            exchangers.append(exchanger)
+            exchangers.append(self.Exchanger(info, gender, match_gender, faculty, match_faculty, interests, self.matching_pts))
 
-        # Same logic as above
+        # Parse Buddies
         for _, data in buddies_data.iterrows():
-            info = []
-            buddy_faculty, buddy_match_faculty, buddy_gender, buddy_match_gender, buddy_interest = self.buddy_preference
-            try:
-                faculty = data[buddy_faculty].split(';')
-                match_faculty = data[buddy_match_faculty] == 'Yes'
-                gender = data[buddy_gender]
-                match_gender = data[buddy_match_gender] == 'Yes'
-                interest = data[buddy_interest].split(';')
-                for col in self.buddy_data:
-                    info.append(data[col])
-            except:
-                print(data)
-                raise Exception(
-                    "Please ensure that the column names for the buddy data are correct")
-            buddy = self.Buddy(info, gender, match_gender,
-                               faculty[:-1], match_faculty, interest[:-1], self.matching_preference)
-            buddies.append(buddy)
+            info = [data[col] for col in self.buddy_data]
+            faculty = str(data[buddy_faculty]).split(';')[:-1]
+            match_faculty = data[buddy_match_faculty] == 'Yes'
+            gender = data[buddy_gender]
+            match_gender = data[buddy_match_gender] == 'Yes'
+            interests = str(data[buddy_interests]).split(';')[:-1]
 
-        # Check if there are enough buddies for the exchangers
-        if len(exchangers) > len(buddies) * self.matching_preference[0]:
-            print("There are not enough buddies for the exchangers\n")
-            print("Number of exchangers: ", len(exchangers))
-            print("Number of buddies: ", len(buddies))
-            print("Number of exchangers per buddy: ",
-                  self.matching_preference[0])
-            print("Ensure that the number of buddy * number of exchangers per buddy is greater than the number of exchangers")
-            raise Exception("There are not enough buddies for the exchangers")
+            buddies.append(self.Buddy(info, gender, match_gender, faculty, match_faculty, interests, self.matching_prefs))
 
-        # Matching algorithm
-        # The alogrithm greedily assigns exchanger to buddies with the highest matching score
-        # Tldr: First come first serve
-        while exchangers and buddies:
-            for exchanger in exchangers:
-                scores = []
-                for buddy in buddies:
-                    score = exchanger.matching_score(buddy)
-                    scores.append(score)
+        buddy_slots = []
+        for buddy in buddies:
+            for slot_ndx in range(buddy.get_capacity()):
+                buddy_slots.append((buddy, slot_ndx))
+        
+        if len(exchangers) > len(buddy_slots):
+            raise Exception("Not enough buddy slots for exchangers. Please adjust the matching preferences or add more buddies.")
+        
+        # Create Cost Matrix
+        num_exchangers = len(exchangers)
+        num_buddy_slots = len(buddy_slots)
+        cost_matrix = np.zeros((num_exchangers, num_buddy_slots))
 
-                best_score = max(scores)
-                index = scores.index(best_score)
-                best_buddy = buddies[index]
+        for i, exchanger in enumerate(exchangers):
+            for j, (buddy, slot_ndx) in enumerate(buddy_slots):
+                score = exchanger.pure_match_score(buddy)
 
-                if best_buddy.add_exchanger(exchanger):
-                    exchangers.remove(exchanger)
-                    buddies.remove(best_buddy)
-                    buddies.append(best_buddy)
-                else:
-                    buddies.remove(best_buddy)
-                    matchings.append(best_buddy)
+                if slot_ndx > 0:
+                    score -= 100 * slot_ndx
+                cost_matrix[i][j] = -score
+        
+        row_ind, col_ind = linear_sum_assignment(cost_matrix)
+        
+        # Assign Matches
+        matchings = []
+        for i, j in zip(row_ind, col_ind):
+            assigned_exchanger = exchangers[i]
+            assigned_buddy, _ = buddy_slots[j]
+            assigned_buddy.add_exchanger(assigned_exchanger)
 
-        if buddies:
-            for buddy in buddies:
+            if assigned_buddy not in matchings:
+                matchings.append(assigned_buddy)
+        
+        for buddy in buddies:
+            if buddy not in matchings:
                 matchings.append(buddy)
-        # Export the matchings to a CSV file
-        # Name of each column in the resulting matchings.csv file
-        # Ensure that each column name is unique
-
-        for i in range(len(self.exchanger_data)):
-            self.exchanger_data[i] += ' '
-
-        # # Put the necessary information from the buddies and exchangers into the matchings_data
-        # # Ensure that the column names are the same as the ones above
-
+        
+        # Exporting to CSV
         results = []
-
-        # Iterate through matchings to populate the rows list
         for buddy in matchings:
+            if not buddy.exchangers:
+                buddy.exchangers = [None]
+            
             for exchanger in buddy.exchangers:
-                result = {self.buddy_data[i]: buddy.info[i]
-                          for i in range(len(self.buddy_data))}
-                result.update({buddy_faculty: ';'.join(buddy.faculty),
-                               buddy_match_faculty: 'Yes' if buddy.match_faculty else 'No preference',
-                               buddy_gender: buddy.gender,
-                               buddy_match_gender: 'Yes' if buddy.match_gender else 'No preference',
-                               buddy_interest: ';'.join(buddy.interest)})
-                result.update({self.exchanger_data[i]: exchanger.info[i]
-                               for i in range(len(self.exchanger_data))})
-
+                result = {f"Buddy_{self.buddy_data[i]}": buddy.info[i] for i in range(len(self.buddy_data))}
                 result.update({
-                    exchanger_faculty + ' ': ';'.join(exchanger.faculty),
-                    exchanger_match_faculty + ' ': 'Yes' if exchanger.match_faculty else 'No preference',
-                    exchanger_gender + ' ': exchanger.gender,
-                    exchanger_match_gender + ' ': 'Yes' if exchanger.match_gender else 'No preference',
-                    exchanger_interest + ' ': ';'.join(exchanger.interest),
+                    f"Buddy_{buddy_faculty}": ';'.join(buddy.faculty),
+                    f"Buddy_{buddy_match_faculty}": 'Yes' if buddy.match_faculty else 'No preference',
+                    f"Buddy_{buddy_gender}": buddy.gender,
+                    f"Buddy_{buddy_match_gender}": 'Yes' if buddy.match_gender else 'No preference',
+                    f"Buddy_{buddy_interests}": ';'.join(buddy.interests)
                 })
 
-                # Append the row to the list
+                if exchanger:
+                    result.update({f"Exchanger_{self.exchanger_data[i]}": exchanger.info[i] for i in range(len(self.exchanger_data))})
+                    result.update({
+                        f"Exchanger_{exchanger_faculty}": ';'.join(exchanger.faculty),
+                        f"Exchanger_{exchanger_match_faculty}": 'Yes' if exchanger.match_faculty else 'No preference',
+                        f"Exchanger_{exchanger_gender}": exchanger.gender,
+                        f"Exchanger_{exchanger_match_gender}": 'Yes' if exchanger.match_gender else 'No preference',
+                        f"Exchanger_{exchanger_interests}": ';'.join(exchanger.interests),
+                    })
+                else:
+                    # Fill Exchanger columns with blanks
+                    result.update({f"Exchanger_{col}": "" for col in self.exchanger_data})
+                    result.update({
+                        f"Exchanger_{exchanger_faculty}": "", f"Exchanger_{exchanger_match_faculty}": "",
+                        f"Exchanger_{exchanger_gender}": "", f"Exchanger_{exchanger_match_gender}": "",
+                        f"Exchanger_{exchanger_interests}": ""
+                    })
+
                 results.append(result)
 
-        # Create the DataFrame from the results list
-        matchings_data = pd.DataFrame(results, columns=self.buddy_data + [
-            buddy_gender, buddy_match_gender,
-            buddy_faculty, buddy_match_faculty, buddy_interest
-        ] + self.exchanger_data + [
-            exchanger_gender + ' ',
-            exchanger_match_gender + ' ',
-            exchanger_faculty + ' ',
-            exchanger_match_faculty + ' ',
-            exchanger_interest + ' '
-        ])
+        matchings_data = pd.DataFrame(results)
+        matchings_data.to_csv(self.file_names[2], index=False, encoding='utf-8-sig')
 
-        for i in range(len(self.exchanger_data)):
-            self.exchanger_data[i] = self.exchanger_data[i][:-1]
+# Testing for CLI, no app yet
+if __name__ == "__main__":
+    files = ["Exchangers.xlsx", "Buddies.xlsx", "Final_Matchings.csv"]
+    exchanger_info_cols = [
+        "Full Name in English (as on your Passport):",
+        "NUS Email Address (exxxxxxx@u.nus.edu):",
+        "Personal Email Address:",
+        "Telegram Handle (do not include the @):",
+        "Home Country:",
+        "Home University (in English):",
+        "Major of study (if any):",
+        "Faculty of study at NUS:",
+        "Year of Study at Home University (at Jan 2026):",
+        "(Optional) If you have any other comments or preferences regarding the matching, please let us know below!"
+    ]
 
-        matchings_data.to_csv(self.file_names[2], index=False)
+    buddy_info_cols = [
+        "Full Name (as on your matric card):",
+        "NUS Email Address (exxxxxxx@u.nus.edu):",
+        "Personal Email Address:",
+        "Telegram Handle (do not include the @):",
+        "Major:",
+        "Year and semester of study (as of AY25/26 Sem 2):",
+        "Faculty:",
+        "(Optional) If you have any other comments or preferences regarding the matching, please let us know below!"
+    ]
+
+    #Preferences
+    exchanger_prefs = [
+        "Faculty of study at NUS:",
+        "Would you want to be matched with a buddy from the same faculty?",
+        "Gender:",
+        "Would you want to be matched with a buddy of the same gender?",
+        "Share with us your interests! (Top 3)"
+    ]
+
+    buddy_prefs = [
+        "Faculty:",
+        "Would you like to be matched with exchangers from the same faculty?",
+        "Gender:",
+        "Would you like to be matched with exchangers of the same gender? ",
+        "Share with us your interests! (Top 3)"
+    ]
+
+    matching_prefs = [3, 30] # Max Exchangers per Buddy, Percentage of Buddies with Max Exchangers
+    matching_pts = [2, 10, 5] # Faculty Match, Gender Match, Interest Match
+
+    print("Running Matcher...")
+    try:
+        matcher = Matcher(
+            file_names=files,
+            exchanger_data=exchanger_info_cols,
+            exchanger_prefs=exchanger_prefs,
+            buddy_data=buddy_info_cols,
+            buddy_prefs=buddy_prefs,
+            matching_prefs=matching_prefs,
+            matching_pts=matching_pts
+        )
+
+        print("Matching in progress...")
+        matcher.match()
+        print("Matching completed successfully! Check Final_Matchings.csv for results.")
+    except Exception as e:
+        print(f"Error: {e}")
