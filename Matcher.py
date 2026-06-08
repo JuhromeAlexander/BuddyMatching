@@ -80,24 +80,33 @@ class Matcher:
 
     class Buddy:
         def __init__(self, info, gender, match_gender, faculty, match_faculty, 
-                     interests, matching_prefs):
+                     interests, preferred_capacity, matching_prefs):
             self.info = info
             self.faculty = faculty
             self.match_faculty = match_faculty
             self.gender = gender
             self.match_gender = match_gender
             self.interests = interests
-            self.odds = random.randint(0, 9)
             self.exchangers = []
 
-            self.max_num_exchangers = matching_prefs[0]
-            self.percentage_buddies_with_max = math.ceil(matching_prefs[1] / 10)
+            self.preferred_capacity_str = str(preferred_capacity).strip().lower()
+            if preferred_capacity == "yes":
+                self.requested_capacity = 2
+            else:
+                self.requested_capacity = 1
+
+            self.odds = matching_prefs[1]
+            self.roll = random.randint(1, 100)
+            
         
         def get_capacity(self):
-            capacity = self.max_num_exchangers
-            if self.odds < 10 - self.percentage_buddies_with_max:
-                capacity = max(1, capacity - 1)
-            return capacity
+            if self.requested_capacity == 1:
+                return 1
+            
+            if self.roll <= self.odds:
+                return 2
+            else:
+                return 1
         
         def add_exchanger(self, exchanger):
             self.exchangers.append(exchanger)
