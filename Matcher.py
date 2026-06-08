@@ -90,7 +90,7 @@ class Matcher:
             self.exchangers = []
 
             self.preferred_capacity_str = str(preferred_capacity).strip().lower()
-            if preferred_capacity == "yes":
+            if self.preferred_capacity_str == "yes":
                 self.requested_capacity = 2
             else:
                 self.requested_capacity = 1
@@ -133,15 +133,14 @@ def match(self):
 
         # Simple Automated Pre-Processing
         exchanger_faculty, exchanger_match_faculty, exchanger_gender, exchanger_match_gender, exchanger_interests = self.exchanger_prefs
-        buddy_faculty, buddy_match_faculty, buddy_gender, buddy_match_gender, buddy_interests = self.buddy_prefs
+        buddy_faculty, buddy_match_faculty, buddy_gender, buddy_match_gender, buddy_interests, buddy_capacity_pref = self.buddy_prefs
 
-        exchagers_data = exchangers_data.drop_duplicates()
+        exchangers_data = exchangers_data.drop_duplicates()
         buddies_data = buddies_data.drop_duplicates()
 
         exchangers_data = exchangers_data.sort_values(
             by=[exchanger_match_faculty, exchanger_match_gender], ascending=[False, False]
         )
-
         buddies_data = buddies_data.sort_values(
             by=[buddy_match_faculty, buddy_match_gender], ascending=[False, False]
         )
@@ -150,7 +149,7 @@ def match(self):
         buddies = []
 
         # Parse Exchangers
-        for _, data in exchagers_data.iterrows():
+        for _, data in exchangers_data.iterrows():
             info = [data[col] for col in self.exchanger_data]
             faculty = str(data[exchanger_faculty]).split(';')[:-1]
             match_faculty = data[exchanger_match_faculty] == 'Yes'
@@ -168,8 +167,9 @@ def match(self):
             gender = data[buddy_gender]
             match_gender = data[buddy_match_gender] == 'Yes'
             interests = str(data[buddy_interests]).split(';')[:-1]
+            preferred_cap = data[buddy_capacity_pref]
 
-            buddies.append(self.Buddy(info, gender, match_gender, faculty, match_faculty, interests, self.matching_prefs))
+            buddies.append(self.Buddy(info, gender, match_gender, faculty, match_faculty, interests, preferred_cap, self.matching_prefs))
 
         buddy_slots = []
         for buddy in buddies:
@@ -189,7 +189,7 @@ def match(self):
                 score = exchanger.pure_match_score(buddy)
 
                 if slot_ndx > 0:
-                    score -= 100 * slot_ndx
+                    score -= 10000 * slot_ndx
                 cost_matrix[i][j] = -score
         
         row_ind, col_ind = linear_sum_assignment(cost_matrix)
@@ -209,47 +209,72 @@ def match(self):
                 matchings.append(buddy)
         
         # Exporting to CSV
-        results = []
+        results_buddies = []
+        results_exchangers = []
+        max_exchangers_per_buddy = self.matching_prefs[0]
+
         for buddy in matchings:
+            # Buddy Facing Export for MailMerge to Buddies
+            buddy_row = {f"[BUDDY] {self.buddy_data[i]}": buddy.info[i] for i in range(len(self.buddy_data))}
+            buddy_row.update({
+                f"[BUDDY] {buddy_faculty}": ';'.join(buddy.faculty),
+                f"[BUDDY] {buddy_match_faculty}": 'Yes' if buddy.match_faculty else 'No preference',
+                f"[BUDDY] {buddy_gender}": buddy.gender,
+                f"[BUDDY] {buddy_match_gender}": 'Yes' if buddy.match_gender else 'No preference',
+                f"[BUDDY] {buddy_interests}": ';'.join(buddy.interests)
+            })
+
             if not buddy.exchangers:
                 buddy.exchangers = [None]
-            
-            for exchanger in buddy.exchangers:
-                result = {f"Buddy_{self.buddy_data[i]}": buddy.info[i] for i in range(len(self.buddy_data))}
-                result.update({
-                    f"Buddy_{buddy_faculty}": ';'.join(buddy.faculty),
-                    f"Buddy_{buddy_match_faculty}": 'Yes' if buddy.match_faculty else 'No preference',
-                    f"Buddy_{buddy_gender}": buddy.gender,
-                    f"Buddy_{buddy_match_gender}": 'Yes' if buddy.match_gender else 'No preference',
-                    f"Buddy_{buddy_interests}": ';'.join(buddy.interests)
-                })
 
-                if exchanger:
-                    result.update({f"Exchanger_{self.exchanger_data[i]}": exchanger.info[i] for i in range(len(self.exchanger_data))})
-                    result.update({
-                        f"Exchanger_{exchanger_faculty}": ';'.join(exchanger.faculty),
-                        f"Exchanger_{exchanger_match_faculty}": 'Yes' if exchanger.match_faculty else 'No preference',
-                        f"Exchanger_{exchanger_gender}": exchanger.gender,
-                        f"Exchanger_{exchanger_match_gender}": 'Yes' if exchanger.match_gender else 'No preference',
-                        f"Exchanger_{exchanger_interests}": ';'.join(exchanger.interests),
+            for slot_num in range(max_exchangers_per_buddy):
+                prefix = f"[EXCHANGER {slot_num + 1}] " 
+                if slot_num < len(buddy.exchangers) and buddy.exchangers[slot_num] is not None:
+                    exchanger = buddy.exchangers[slot_num]
+                    buddy_row.update({f"{prefix}{self.exchanger_data[i]}": exchanger.info[i] for i in range(len(self.exchanger_data))})
+                    buddy_row.update({
+                        f"{prefix}{exchanger_faculty}": ';'.join(exchanger.faculty),
+                        f"{prefix}{exchanger_match_faculty}": 'Yes' if exchanger.match_faculty else 'No preference',
+                        f"{prefix}{exchanger_gender}": exchanger.gender,
+                        f"{prefix}{exchanger_match_gender}": 'Yes' if exchanger.match_gender else 'No preference',
+                        f"{prefix}{exchanger_interests}": ';'.join(exchanger.interests),
                     })
                 else:
-                    # Fill Exchanger columns with blanks
-                    result.update({f"Exchanger_{col}": "" for col in self.exchanger_data})
-                    result.update({
-                        f"Exchanger_{exchanger_faculty}": "", f"Exchanger_{exchanger_match_faculty}": "",
-                        f"Exchanger_{exchanger_gender}": "", f"Exchanger_{exchanger_match_gender}": "",
-                        f"Exchanger_{exchanger_interests}": ""
+                    buddy_row.update({f"{prefix}{col}": "" for col in self.exchanger_data})
+                    buddy_row.update({
+                        f"{prefix}{exchanger_faculty}": "", f"{prefix}{exchanger_match_faculty}": "",
+                        f"{prefix}{exchanger_gender}": "", f"{prefix}{exchanger_match_gender}": "",
+                        f"{prefix}{exchanger_interests}": ""
                     })
+            results_buddies.append(buddy_row)
 
-                results.append(result)
-
-        matchings_data = pd.DataFrame(results)
-        matchings_data.to_csv(self.file_names[2], index=False, encoding='utf-8-sig')
+            # Exchanger Facing Export for MailMerge to Exchangers
+            for exchanger in buddy.exchangers:
+                if exchanger is not None:
+                    exch_row = {f"[MY INFO] {self.exchanger_data[i]}": exchanger.info[i] for i in range(len(self.exchanger_data))}
+                    exch_row.update({
+                        f"[MY INFO] {exchanger_faculty}": ';'.join(exchanger.faculty),
+                        f"[MY INFO] {exchanger_match_faculty}": 'Yes' if exchanger.match_faculty else 'No preference',
+                        f"[MY INFO] {exchanger_gender}": exchanger.gender,
+                        f"[MY INFO] {exchanger_match_gender}": 'Yes' if exchanger.match_gender else 'No preference',
+                        f"[MY INFO] {exchanger_interests}": ';'.join(exchanger.interests),
+                    })
+                    exch_row.update({f"[MY BUDDY] {self.buddy_data[i]}": buddy.info[i] for i in range(len(self.buddy_data))})
+                    exch_row.update({
+                        f"[MY BUDDY] {buddy_faculty}": ';'.join(buddy.faculty),
+                        f"[MY BUDDY] {buddy_match_faculty}": 'Yes' if buddy.match_faculty else 'No preference',
+                        f"[MY BUDDY] {buddy_gender}": buddy.gender,
+                        f"[MY BUDDY] {buddy_match_gender}": 'Yes' if buddy.match_gender else 'No preference',
+                        f"[MY BUDDY] {buddy_interests}": ';'.join(buddy.interests)
+                    })
+                    results_exchangers.append(exch_row)
+                
+        pd.DataFrame(results_buddies).to_csv(self.file_names[2], index=False, encoding='utf-8-sig')
+        pd.DataFrame(results_exchangers).to_csv(self.file_names[3], index=False, encoding='utf-8-sig')
 
 # Testing for CLI, no app yet
 if __name__ == "__main__":
-    files = ["Exchangers.xlsx", "Buddies.xlsx", "Final_Matchings.csv"]
+    files = ["Exchangers.xlsx", "Buddies.xlsx", "Final_Matchings_Buddy.csv", "Final_Matchings_Exchanger.csv"]
     exchanger_info_cols = [
         "Full Name in English (as on your Passport):",
         "NUS Email Address (exxxxxxx@u.nus.edu):",
@@ -288,10 +313,12 @@ if __name__ == "__main__":
         "Would you like to be matched with exchangers from the same faculty?",
         "Gender:",
         "Would you like to be matched with exchangers of the same gender? ",
-        "Share with us your interests! (Top 3)"
+        "Share with us your interests! (Top 3)",
+        # REMEMBER TO UPDATE BELOW ONCE FINALIZED COPY FOR BUDDY PREF COLS
+        "Capacity"
     ]
 
-    matching_prefs = [3, 30] # Max Exchangers per Buddy, Percentage of Buddies with Max Exchangers
+    matching_prefs = [2, 40] # Max Exchangers per Buddy, Percentage of Buddies with Max Exchangers
     matching_pts = [2, 10, 5] # Faculty Match, Gender Match, Interest Match
 
     print("Running Matcher...")
@@ -308,6 +335,6 @@ if __name__ == "__main__":
 
         print("Matching in progress...")
         matcher.match()
-        print("Matching completed successfully! Check Final_Matchings.csv for results.")
+        print("Matching completed successfully! Check Generated CSV files for results.")
     except Exception as e:
         print(f"Error: {e}")
