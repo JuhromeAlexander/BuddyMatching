@@ -63,13 +63,37 @@ class MatcherApp(ctk.CTk):
         ctk.CTkButton(tab, text="Browse...", command=self.browse_buddy).pack(pady=5)
         ctk.CTkLabel(tab, textvariable=self.buddy_file, text_color="gray").pack(pady=(0, 10))
 
-        # Lottery Settings
-        ctk.CTkLabel(tab, text="Lottery Settings", font=ctk.CTkFont(weight="bold")).pack(pady=(20, 5))
-        self.lottery_slider = ctk.CTkSlider(tab, from_=0, to=100, number_of_steps=10, command=self.update_slider_label)
+        # Settings Frame
+        settings_frame = ctk.CTkFrame(tab, fg_color="transparent")
+        settings_frame.pack(fill="x", padx=20, pady=10)
+
+        # Lottery Settings (Left Side)
+        lottery_frame = ctk.CTkFrame(settings_frame, fg_color="transparent")
+        lottery_frame.pack(side="left", expand=True)
+        ctk.CTkLabel(lottery_frame, text="Lottery Settings", font=ctk.CTkFont(weight="bold")).pack(pady=(0, 5))
+        self.lottery_slider = ctk.CTkSlider(lottery_frame, from_=0, to=100, number_of_steps=10, command=self.update_slider_label)
         self.lottery_slider.set(40)
         self.lottery_slider.pack(pady=5)
-        self.lottery_label = ctk.CTkLabel(tab, text="Lottery Win Chance: 40%")
-        self.lottery_label.pack(pady=(0, 10))
+        self.lottery_label = ctk.CTkLabel(lottery_frame, text="Lottery Win Chance: 40%")
+        self.lottery_label.pack()
+
+        # Algorithm Points Settings (Right Side)
+        pts_frame = ctk.CTkFrame(settings_frame, fg_color="transparent")
+        pts_frame.pack(side="right", expand=True)
+        ctk.CTkLabel(pts_frame, text="Algorithm Point Weights", font=ctk.CTkFont(weight="bold")).grid(row=0, column=0, columnspan=2, pady=(0, 5))
+
+        self.fac_pts = ctk.StringVar(value="5")
+        self.gen_pts = ctk.StringVar(value="10")
+        self.int_pts = ctk.StringVar(value="2")
+
+        ctk.CTkLabel(pts_frame, text="Faculty Match:").grid(row=1, column=0, sticky="e", padx=5, pady=2)
+        ctk.CTkEntry(pts_frame, textvariable=self.fac_pts, width=40).grid(row=1, column=1, sticky="w", pady=2)
+
+        ctk.CTkLabel(pts_frame, text="Gender Match:").grid(row=2, column=0, sticky="e", padx=5, pady=2)
+        ctk.CTkEntry(pts_frame, textvariable=self.gen_pts, width=40).grid(row=2, column=1, sticky="w", pady=2)
+
+        ctk.CTkLabel(pts_frame, text="Interest Match:").grid(row=3, column=0, sticky="e", padx=5, pady=2)
+        ctk.CTkEntry(pts_frame, textvariable=self.int_pts, width=40).grid(row=3, column=1, sticky="w", pady=2)
 
     def build_mapping_tabs(self):
         self.exch_scroll = ctk.CTkScrollableFrame(self.tabs.tab("2. Exchanger Map"))
@@ -118,7 +142,7 @@ class MatcherApp(ctk.CTk):
 
         # Checkboxes - Output Information
         ctk.CTkLabel(parent_frame, text="1. Select Output Information", font=ctk.CTkFont(weight="bold", size=16)).pack(pady=(10, 5), anchor="w")
-        ctk.CTkLabel(parent_frame, text="Check the boxes you want included in the final CSV:", text_color="gray").pack(anchor="w", pady=(0,10))
+        ctk.CTkLabel(parent_frame, text="Check the boxes you want included in the final CSV, not everything needs to be selected!:", text_color="gray").pack(anchor="w", pady=(0,10))
 
         for col in columns:
             var = ctk.BooleanVar(value=True) # Default to checked
@@ -210,9 +234,19 @@ class MatcherApp(ctk.CTk):
             files = [exch_path, buddy_path, buddy_out, exch_out]
 
             matching_prefs = [2, int(self.lottery_slider.get())]
-            matching_pts = [2, 10, 5]
 
-            # Initialise Engine
+            # Pull points from UI
+            try:
+                f_pts = int(self.fac_pts.get())
+                g_pts = int(self.gen_pts.get())
+                i_pts = int(self.int_pts.get())
+                matching_pts = [f_pts, g_pts, i_pts]
+            except ValueError:
+                self.run_btn.configure(state="normal", text="RUN MATCHING ALGORITHM")
+                messagebox.showerror("Invalid Input", "Matching point weights must be whole numbers!")
+                return
+
+            # Pass to Engine
             my_matcher = Matcher(files, exchanger_info_cols, exchanger_prefs, buddy_info_cols, buddy_prefs, matching_prefs, matching_pts)
             my_matcher.match()
 
