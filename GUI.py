@@ -1,7 +1,8 @@
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
-from Matcher import Matcher
+import pandas as pd
 import os
+from Matcher import Matcher
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
@@ -10,118 +11,208 @@ class MatcherApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("NUS Buddy Matching - Matcher App")
-        self.geometry("600x600")
+        self.geometry("750x800")
         
         # File Paths
         self.exchanger_file = ctk.StringVar()
         self.buddy_file = ctk.StringVar()
 
+        # Dictionaries to store our dynamic UI variables
+        self.exch_info_vars = {}   # Checkboxes
+        self.buddy_info_vars = {}  # Checkboxes
+        self.exch_pref_vars = {}   # Dropdowns
+        self.buddy_pref_vars = {}  # Dropdowns
+
         self.create_widgets()
 
     def create_widgets(self):
         # Title
-        title_label = ctk.CTkLabel(self, text="NUS Buddy Matching - Matcher App", font=ctk.CTkFont(size=24, weight="bold"))
-        title_label.pack(pady=20, padx=10)
+        title_label = ctk.CTkLabel(self, text="NUS Buddy Matching Engine", font=ctk.CTkFont(size=24, weight="bold"))
+        title_label.pack(pady=10, padx=10)
 
-        file_frame = ctk.CTkFrame(self)
-        file_frame.pack(pady=10, padx=20, fill="x")
-
-        #Exchanger File
-        ctk.CTkLabel(file_frame, text="1. Select Exchangers File (.xlsx)").pack(pady=(10, 0))
-        exch_btn = ctk.CTkButton(file_frame, text="Browse...", command=self.browse_exchanger)
-        exch_btn.pack(pady=5)
-        ctk.CTkLabel(file_frame, textvariable=self.exchanger_file, text_color="gray").pack(pady=(0, 10))
-
-        # Buddy File Picker
-        ctk.CTkLabel(file_frame, text="2. Select Buddies File (.xlsx)").pack(pady=(10, 0))
-        buddy_btn = ctk.CTkButton(file_frame, text="Browse...", command=self.browse_buddy)
-        buddy_btn.pack(pady=5)
-        ctk.CTkLabel(file_frame, textvariable=self.buddy_file, text_color="gray").pack(pady=(0, 10))
-
-        # Settings
-        settings_frame = ctk.CTkFrame(self)
-        settings_frame.pack(pady=10, padx=20, fill="x")
+        # Tab View for better organization
+        self.tabs = ctk.CTkTabview(self)
+        self.tabs.pack(fill="both", expand=True, padx=20, pady=10)
         
-        ctk.CTkLabel(settings_frame, text="3. Lottery Settings", font=ctk.CTkFont(weight="bold")).pack(pady=(10, 5))
-        
-        self.lottery_slider = ctk.CTkSlider(settings_frame, from_=0, to=100, number_of_steps=10)
-        self.lottery_slider.set(40) # Default to 40%
-        self.lottery_slider.pack(pady=5)
-        
-        self.lottery_label = ctk.CTkLabel(settings_frame, text="Lottery Win Chance: 40%")
-        self.lottery_label.pack(pady=(0, 10))
-        self.lottery_slider.configure(command=self.update_slider_label)
+        self.tabs.add("1. Files & Settings")
+        self.tabs.add("2. Exchanger Map")
+        self.tabs.add("3. Buddy Map")
 
-        # 4. Run Button
+        self.build_files_tab()
+        self.build_mapping_tabs()
+
+        # Run Button & Console
         self.run_btn = ctk.CTkButton(self, text="RUN MATCHING ALGORITHM", fg_color="green", hover_color="darkgreen", height=50, command=self.run_matching)
-        self.run_btn.pack(pady=20, padx=20, fill="x")
+        self.run_btn.pack(pady=10, padx=20, fill="x")
         
-        # 5. Status Console
         self.console = ctk.CTkTextbox(self, height=100)
-        self.console.pack(pady=10, padx=20, fill="x")
+        self.console.pack(pady=(0, 20), padx=20, fill="x")
         self.console.insert("0.0", "System Ready. Please select your Excel files.\n")
         self.console.configure(state="disabled")
 
-    # --- Helper Functions ---
+    def build_files_tab(self):
+        tab = self.tabs.tab("1. Files & Settings")
+
+        # Exchanger File
+        ctk.CTkLabel(tab, text="Select Exchangers File (.xlsx)", font=ctk.CTkFont(weight="bold")).pack(pady=(10, 0))
+        ctk.CTkButton(tab, text="Browse...", command=self.browse_exchanger).pack(pady=5)
+        ctk.CTkLabel(tab, textvariable=self.exchanger_file, text_color="gray").pack(pady=(0, 10))
+
+        # Buddy File
+        ctk.CTkLabel(tab, text="Select Buddies File (.xlsx)", font=ctk.CTkFont(weight="bold")).pack(pady=(10, 0))
+        ctk.CTkButton(tab, text="Browse...", command=self.browse_buddy).pack(pady=5)
+        ctk.CTkLabel(tab, textvariable=self.buddy_file, text_color="gray").pack(pady=(0, 10))
+
+        # Lottery Settings
+        ctk.CTkLabel(tab, text="Lottery Settings", font=ctk.CTkFont(weight="bold")).pack(pady=(20, 5))
+        self.lottery_slider = ctk.CTkSlider(tab, from_=0, to=100, number_of_steps=10, command=self.update_slider_label)
+        self.lottery_slider.set(40)
+        self.lottery_slider.pack(pady=5)
+        self.lottery_label = ctk.CTkLabel(tab, text="Lottery Win Chance: 40%")
+        self.lottery_label.pack(pady=(0, 10))
+
+    def build_mapping_tabs(self):
+        self.exch_scroll = ctk.CTkScrollableFrame(self.tabs.tab("2. Exchanger Map"))
+        self.exch_scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        ctk.CTkLabel(self.exch_scroll, text="Waiting for Exchanger file...", text_color="gray").pack(pady=20)
+
+        self.buddy_scroll = ctk.CTkScrollableFrame(self.tabs.tab("3. Buddy Map"))
+        self.buddy_scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        ctk.CTkLabel(self.buddy_scroll, text="Waiting for Buddy file...", text_color="gray").pack(pady=20)
+
+    # Dynamic Loading + File Browsing
+    def browse_exchanger(self):
+        filename = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls"), ("CSV files", "*.csv")])
+        if filename: 
+            self.exchanger_file.set(filename)
+            self.load_columns(filename, "exchanger")
+
+    def browse_buddy(self):
+        filename = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls"), ("CSV files", "*.csv")])
+        if filename: 
+            self.buddy_file.set(filename)
+            self.load_columns(filename, "buddy")
+
+    def load_columns(self, filename, target):
+        try:
+            # Instantly read just the headers
+            df = pd.read_excel(filename, nrows=0) if filename.endswith(('.xlsx', '.xls')) else pd.read_csv(filename, nrows=0)
+            columns = df.columns.tolist()
+
+            if target == "exchanger":
+                self.populate_mapping_ui(self.exch_scroll, columns, self.exch_info_vars, self.exch_pref_vars, target)
+                self.log("Exchanger columns loaded dynamically.")
+            else:
+                self.populate_mapping_ui(self.buddy_scroll, columns, self.buddy_info_vars, self.buddy_pref_vars, target)
+                self.log("Buddy columns loaded dynamically.")
+
+        except Exception as e:
+            messagebox.showerror("Error Reading File", f"Could not read columns from file:\n{str(e)}")
+
+    def populate_mapping_ui(self, parent_frame, columns, info_vars_dict, pref_vars_dict, target):
+        # Clear existing widgets
+        for widget in parent_frame.winfo_children():
+            widget.destroy()
+        info_vars_dict.clear()
+        pref_vars_dict.clear()
+
+        # Checkboxes - Output Information
+        ctk.CTkLabel(parent_frame, text="1. Select Output Information", font=ctk.CTkFont(weight="bold", size=16)).pack(pady=(10, 5), anchor="w")
+        ctk.CTkLabel(parent_frame, text="Check the boxes you want included in the final CSV:", text_color="gray").pack(anchor="w", pady=(0,10))
+
+        for col in columns:
+            var = ctk.BooleanVar(value=True) # Default to checked
+            cb = ctk.CTkCheckBox(parent_frame, text=col, variable=var)
+            cb.pack(anchor="w", pady=2)
+            info_vars_dict[col] = var
+
+        # Dropdowns - Algo Preferences 
+        ctk.CTkLabel(parent_frame, text="\n2. Map Algorithm Preferences", font=ctk.CTkFont(weight="bold", size=16)).pack(pady=(20, 5), anchor="w")
+        ctk.CTkLabel(parent_frame, text="Match the exact column to the required algorithm data:", text_color="gray").pack(anchor="w", pady=(0,10))
+
+        pref_labels = [
+            "Faculty Column:", 
+            "Same Faculty Preference Column:", 
+            "Gender Column:", 
+            "Same Gender Preference Column:", 
+            "Interests (Top 3) Column:"
+        ]
+        
+        # Keywords to help the Auto-Guesser
+        keywords = [
+            ["faculty"],
+            ["same faculty"],
+            ["gender", "sex"],
+            ["same gender"],
+            ["interest", "hobby", "share"]
+        ]
+
+        if target == "buddy":
+            pref_labels.append("Capacity Column:")
+            keywords.append(["capacity", "how many", "number"])
+
+        options = ["-- Select Column --"] + columns
+
+        for i, label in enumerate(pref_labels):
+            ctk.CTkLabel(parent_frame, text=label).pack(anchor="w", pady=(5,0))
+            dropdown = ctk.CTkComboBox(parent_frame, values=options, width=400)
+            
+            # The Auto-Guesser Logic
+            best_guess = "-- Select Column --"
+            for col in columns:
+                if any(kw in col.lower() for kw in keywords[i]):
+                    best_guess = col
+                    break
+            
+            dropdown.set(best_guess)
+            dropdown.pack(anchor="w", pady=(0, 5))
+            pref_vars_dict[i] = dropdown
+
+    # --- Utilities & Execution ---
+    def update_slider_label(self, value):
+        self.lottery_label.configure(text=f"Lottery Win Chance: {int(value)}%")
+
     def log(self, message):
         self.console.configure(state="normal")
         self.console.insert("end", message + "\n")
         self.console.see("end")
         self.console.configure(state="disabled")
-        self.update() # Force UI to update
+        self.update()
 
-    def update_slider_label(self, value):
-        self.lottery_label.configure(text=f"Lottery Win Chance: {int(value)}%")
-
-    def browse_exchanger(self):
-        filename = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls"), ("CSV files", "*.csv")])
-        if filename: self.exchanger_file.set(filename)
-
-    def browse_buddy(self):
-        filename = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls"), ("CSV files", "*.csv")])
-        if filename: self.buddy_file.set(filename)
-    
     def run_matching(self):
         exch_path = self.exchanger_file.get()
         buddy_path = self.buddy_file.get()
 
         if not exch_path or not buddy_path:
-            messagebox.showwarning("Missing Files", "Please select both the Exchangers and Buddies files!")
+            messagebox.showwarning("Missing Files", "Please select both the Exchangers and Buddies files on Tab 1!")
+            return
+
+        # Gather dynamic Checkbox data
+        exchanger_info_cols = [col for col, var in self.exch_info_vars.items() if var.get()]
+        buddy_info_cols = [col for col, var in self.buddy_info_vars.items() if var.get()]
+
+        # Gather dynamic Dropdown data safely using the length of the dictionaries
+        exchanger_prefs = [self.exch_pref_vars[i].get() for i in range(len(self.exch_pref_vars))]
+        buddy_prefs = [self.buddy_pref_vars[i].get() for i in range(len(self.buddy_pref_vars))]
+
+        # Validate that no dropdowns were left unselected
+        if "-- Select Column --" in exchanger_prefs or "-- Select Column --" in buddy_prefs:
+            messagebox.showwarning("Incomplete Mapping", "Please ensure all Algorithm Preferences are selected in Tabs 2 and 3!")
             return
 
         self.log("\nStarting matching process...")
         self.run_btn.configure(state="disabled", text="MATCHING...")
 
         try:
-            # Generate output filenames in the same folder as the Buddy file
             output_dir = os.path.dirname(buddy_path)
             buddy_out = os.path.join(output_dir, "Final_Matchings_Buddy.csv")
             exch_out = os.path.join(output_dir, "Final_Matchings_Exchanger.csv")
             files = [exch_path, buddy_path, buddy_out, exch_out]
 
-            exchanger_info_cols = ["Full Name in English (as on your Passport):", "NUS Email Address (exxxxxxx@u.nus.edu):", "Personal Email Address:", "Telegram Handle (do not include the @):", "Home Country:", "Home University (in English):", "Major of study (if any):", "Faculty of study at NUS:", "Year of Study at Home University (at Jan 2026):", "(Optional) If you have any other comments or preferences regarding the matching, please let us know below!"]
-            buddy_info_cols = ["Full Name (as on your matric card):", "NUS Email Address (exxxxxxx@u.nus.edu):", "Personal Email Address:", "Telegram Handle (do not include the @):", "Major:", "Year and semester of study (as of AY25/26 Sem 2):", "Faculty:", "(Optional) If you have any other comments or preferences regarding the matching, please let us know below!"]
-            exchanger_prefs = [
-                "Faculty of study at NUS:",
-                "Would you want to be matched with a buddy from the same faculty?",
-                "Gender:",
-                "Would you want to be matched with a buddy of the same gender?",
-                "Share with us your interests! (Top 3)"
-            ]
-
-            buddy_prefs = [
-                "Faculty:",
-                "Would you like to be matched with exchangers from the same faculty?",
-                "Gender:",
-                "Would you like to be matched with exchangers of the same gender? ",
-                "Share with us your interests! (Top 3)",
-                "Capacity"
-            ]
-
             matching_prefs = [2, int(self.lottery_slider.get())]
             matching_pts = [2, 10, 5]
 
-            # Initialize and run your engine
+            # Initialise Engine
             my_matcher = Matcher(files, exchanger_info_cols, exchanger_prefs, buddy_info_cols, buddy_prefs, matching_prefs, matching_pts)
             my_matcher.match()
 
