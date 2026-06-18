@@ -111,7 +111,7 @@ class Matcher:
         def add_exchanger(self, exchanger):
             self.exchangers.append(exchanger)
 
-def match(self):
+    def match(self):
         def load_data(filepath):
             # Check the file extension
             _, ext = os.path.splitext(filepath)
