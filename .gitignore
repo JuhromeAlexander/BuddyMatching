@@ -2,6 +2,10 @@
 venv/
 Testing/
 clean_env/
+__pycache__/
+
+V1/Testing_V1/
+V1/__pycache__
 
 #Ignore all XLSX
 .xlsx
