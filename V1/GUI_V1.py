@@ -99,8 +99,30 @@ class MatcherApp(ctk.CTk):
             exch_out = os.path.join(output_dir, "Final_Matchings_Exchanger.csv")
             files = [exch_path, buddy_path, buddy_out, exch_out]
 
-            exchanger_info_cols = ["Full Name in English (as on your Passport):", "NUS Email Address (exxxxxxx@u.nus.edu):", "Personal Email Address:", "Telegram Handle (do not include the @):", "Home Country:", "Home University (in English):", "Major of study (if any):", "Faculty of study at NUS:", "Year of Study at Home University (at Jan 2026):", "(Optional) If you have any other comments or preferences regarding the matching, please let us know below!"]
-            buddy_info_cols = ["Full Name (as on your matric card):", "NUS Email Address (exxxxxxx@u.nus.edu):", "Personal Email Address:", "Telegram Handle (do not include the @):", "Major:", "Year and semester of study (as of AY25/26 Sem 2):", "Faculty:", "(Optional) If you have any other comments or preferences regarding the matching, please let us know below!"]
+            exchanger_info_cols = ["Full Name in English (as on your Passport):", 
+                                   "NUS Email Address (exxxxxxx@u.nus.edu):",
+                                   "Personal Email Address:", 
+                                   "Telegram Handle (do not include the @):", 
+                                   "Home Country:",
+                                   "Home University (in English):", 
+                                   "Major of study (if any):", 
+                                   "Faculty of study at NUS:",
+                                   # CHANGE - For Future, Please Change to the Necessary Month
+                                   "Year of Study at Home University (at Aug 2026):",
+                                   "(Optional) If you have any other comments, please let us know below!"
+                                   ]
+            
+            buddy_info_cols = ["Full Name (as on your matric card):", 
+                               "NUS Email Address (exxxxxxx@u.nus.edu):", 
+                               "Personal Email Address:", 
+                               "Telegram Handle (do not include the @):", 
+                               "Major:", 
+                               # CHANGE - For Future, Please Change AY and SEM to the whatever is appropriate
+                               "Year and semester of study (as of AY26/27 Sem 1):", 
+                               "Faculty:", 
+                               "(Optional) If you have any other comments, please let us know below!"
+                               ]
+            
             exchanger_prefs = [
                 "Faculty of study at NUS:",
                 "Would you want to be matched with a buddy from the same faculty?",
@@ -113,9 +135,10 @@ class MatcherApp(ctk.CTk):
                 "Faculty:",
                 "Would you like to be matched with exchangers from the same faculty?",
                 "Gender:",
+                # CHANGE - Take note of the space at the end, its present in the Form Questions but maybe in future it might not be
                 "Would you like to be matched with exchangers of the same gender? ",
                 "Share with us your interests! (Top 3)",
-                "Capacity"
+                "Would you be prefer to be paired with more than 1 buddy?"
             ]
 
             matching_prefs = [2, int(self.lottery_slider.get())]
