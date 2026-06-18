@@ -142,7 +142,7 @@ class MatcherApp(ctk.CTk):
             ]
 
             matching_prefs = [2, int(self.lottery_slider.get())]
-            matching_pts = [2, 10, 5]
+            matching_pts = [5, 10, 2]
 
             # Initialize and run your engine
             my_matcher = Matcher(files, exchanger_info_cols, exchanger_prefs, buddy_info_cols, buddy_prefs, matching_prefs, matching_pts)
