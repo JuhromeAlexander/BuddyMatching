@@ -6,6 +6,9 @@ __pycache__/
 
 V1/Testing_V1/
 V1/__pycache__
+V1/build/
+V1/dist/
+V1/NUS BUDDY MATCHING V1.spec
 
 #Ignore all XLSX
 .xlsx
