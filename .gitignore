@@ -1,0 +1,9 @@
+#Ignore everything
+venv/
+Testing/
+clean_env/
+
+#Ignore all XLSX
+.xlsx
+.csv
+original.py
