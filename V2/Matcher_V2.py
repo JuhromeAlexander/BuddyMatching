@@ -209,9 +209,12 @@ def match(self):
                 matchings.append(buddy)
         
         # Exporting to CSV
-        results_buddies = []
-        results_exchangers = []
         max_exchangers_per_buddy = self.matching_prefs[0]
+
+        # Exchanger 1 masterlist, Buddy split into 2 files based on how many exchangers they got (1 vs 2)
+        results_buddies = {i: [] for i in range(1, max_exchangers_per_buddy + 1)}
+        results_exchangers = [] 
+        unmatched_buddies = [] 
 
         for buddy in matchings:
             # Buddy Facing Export for MailMerge to Buddies
@@ -226,6 +229,10 @@ def match(self):
 
             if not buddy.exchangers:
                 buddy.exchangers = [None]
+
+            # Count # Exchangers assigned, ignore NONE
+            actual_exchangers = [e for e in buddy.exchangers if e is not None]
+            num_assigned = len(actual_exchangers)
 
             for slot_num in range(max_exchangers_per_buddy):
                 prefix = f"[EXCHANGER {slot_num + 1}] " 
@@ -246,28 +253,49 @@ def match(self):
                         f"{prefix}{exchanger_gender}": "", f"{prefix}{exchanger_match_gender}": "",
                         f"{prefix}{exchanger_interests}": ""
                     })
-            results_buddies.append(buddy_row)
+            
+            # Sort based on # Exchangers assigned
+            if num_assigned == 0:
+                unmatched_buddies.append(buddy_row)
+            else:
+                results_buddies[num_assigned].append(buddy_row)
 
-            # Exchanger Facing Export for MailMerge to Exchangers
-            for exchanger in buddy.exchangers:
-                if exchanger is not None:
-                    exch_row = {f"[MY INFO] {self.exchanger_data[i]}": exchanger.info[i] for i in range(len(self.exchanger_data))}
-                    exch_row.update({
-                        f"[MY INFO] {exchanger_faculty}": ';'.join(exchanger.faculty),
-                        f"[MY INFO] {exchanger_match_faculty}": 'Yes' if exchanger.match_faculty else 'No preference',
-                        f"[MY INFO] {exchanger_gender}": exchanger.gender,
-                        f"[MY INFO] {exchanger_match_gender}": 'Yes' if exchanger.match_gender else 'No preference',
-                        f"[MY INFO] {exchanger_interests}": ';'.join(exchanger.interests),
-                    })
-                    exch_row.update({f"[MY BUDDY] {self.buddy_data[i]}": buddy.info[i] for i in range(len(self.buddy_data))})
-                    exch_row.update({
-                        f"[MY BUDDY] {buddy_faculty}": ';'.join(buddy.faculty),
-                        f"[MY BUDDY] {buddy_match_faculty}": 'Yes' if buddy.match_faculty else 'No preference',
-                        f"[MY BUDDY] {buddy_gender}": buddy.gender,
-                        f"[MY BUDDY] {buddy_match_gender}": 'Yes' if buddy.match_gender else 'No preference',
-                        f"[MY BUDDY] {buddy_interests}": ';'.join(buddy.interests)
-                    })
-                    results_exchangers.append(exch_row)
-                
-        pd.DataFrame(results_buddies).to_csv(self.file_names[2], index=False, encoding='utf-8-sig')
+            # Exchanger Facing Export
+            for exchanger in actual_exchangers:
+                exch_row = {f"[MY INFO] {self.exchanger_data[i]}": exchanger.info[i] for i in range(len(self.exchanger_data))}
+                exch_row.update({
+                    f"[MY INFO] {exchanger_faculty}": ';'.join(exchanger.faculty),
+                    f"[MY INFO] {exchanger_match_faculty}": 'Yes' if exchanger.match_faculty else 'No preference',
+                    f"[MY INFO] {exchanger_gender}": exchanger.gender,
+                    f"[MY INFO] {exchanger_match_gender}": 'Yes' if exchanger.match_gender else 'No preference',
+                    f"[MY INFO] {exchanger_interests}": ';'.join(exchanger.interests),
+                })
+                exch_row.update({f"[MY BUDDY] {self.buddy_data[i]}": buddy.info[i] for i in range(len(self.buddy_data))})
+                exch_row.update({
+                    f"[MY BUDDY] {buddy_faculty}": ';'.join(buddy.faculty),
+                    f"[MY BUDDY] {buddy_match_faculty}": 'Yes' if buddy.match_faculty else 'No preference',
+                    f"[MY BUDDY] {buddy_gender}": buddy.gender,
+                    f"[MY BUDDY] {buddy_match_gender}": 'Yes' if buddy.match_gender else 'No preference',
+                    f"[MY BUDDY] {buddy_interests}": ';'.join(buddy.interests)
+                })
+                results_exchangers.append(exch_row)
+
+        # File Saving
+        # Helper function to inject the split name into your file path
+        def inject_suffix(filepath, suffix):
+            base, ext = os.path.splitext(filepath)
+            return f"{base}_{suffix}{ext}"
+
+        # Save Buddy Files (Split by capacity)
+        for count, rows in results_buddies.items():
+            if rows: 
+                out_path = inject_suffix(self.file_names[2], f"with_{count}_Exchangers")
+                pd.DataFrame(rows).to_csv(out_path, index=False, encoding='utf-8-sig')
+
+        # Save Exchanger File
         pd.DataFrame(results_exchangers).to_csv(self.file_names[3], index=False, encoding='utf-8-sig')
+
+        # Save Unmatched Buddies (JIC)
+        if unmatched_buddies:
+            out_path = inject_suffix(self.file_names[2], "UNMATCHED")
+            pd.DataFrame(unmatched_buddies).to_csv(out_path, index=False, encoding='utf-8-sig')
