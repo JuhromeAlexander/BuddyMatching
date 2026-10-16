@@ -4,7 +4,7 @@ Simple GUI Application to help with Automatic Matching for GSA Buddy Programme
 
 Download the Matcher from Releases. Ensure that the correct version is downloaded
 
-V1: Link to [Version 1 Application](https://github.com/JuhromeAlexander/BuddyMatching/releases/tag/OfficialV1)
+V1: Link to [Version 1 Application](https://github.com/JuhromeAlexander/BuddyMatching/releases/tag/OfficialV1)  
 V2: To be Updated
 
 **NOTE**
